@@ -39,5 +39,12 @@ class Handler extends ExceptionHandler
         });
     }
 
+  /*  public function render($request,Throwable $e){
+        return response()->json([
+            'error'=>'you are not login'
+        ],401);
+    }*/
+
+
 
 }

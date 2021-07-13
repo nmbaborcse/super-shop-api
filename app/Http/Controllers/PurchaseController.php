@@ -264,7 +264,7 @@ class PurchaseController extends Controller
 
                 if($inventory!=''){
                                     //                  20                      -           12                     +    15 = 23
-                    $available_big_unit_qty = 0;
+                    $available_big_unit_qty = $inventory->available_big_unit_qty;
                     if($item->big_unit_qty>0){
                         $available_big_unit_qty = $inventory->available_big_unit_qty - $inventoryChallan->big_unit_qty + $item->big_unit_qty;
                     }
@@ -302,13 +302,37 @@ class PurchaseController extends Controller
             $oldProductId = PurchaseItem::where('purchase_id',$id)->pluck('product_id')->toArray();
             $missingProduct = array_diff($oldProductId,$newProductId);
             $missingProductId = array_values($missingProduct);
-            PurchaseItem::whereIn('product_id',$missingProductId)->where('purchase_id',$id)->delete();
+
+           $purchaseItems = PurchaseItem::whereIn('product_id',$missingProductId)->where('purchase_id',$id)->get();
+            //Inventory Update for Missing Product
             InventoryChallan::whereIn('product_id',$missingProductId)->where('purchase_id',$id)->delete();
+            foreach($purchaseItems as $purchaseItem){
+                $lastChallan = InventoryChallan::where('product_id',$purchaseItem->product_id)->orderBy('id','DESC')->first();
+                $inventory = Inventory::where('product_id',$purchaseItem->product_id)->first();
+                if($inventory!=''){
+                    $available_big_unit_qty = $inventory->available_big_unit_qty;
+                    if($item->big_unit_qty>0){
+                        $available_big_unit_qty = $inventory->available_big_unit_qty - $purchaseItem->big_unit_qty;
+                    }
+                    $available_small_unit_qty = $inventory->available_small_unit_qty - $purchaseItem->small_unit_qty;
+                }
+                $inventoryInput = [
+                    'available_big_unit_qty'=>$available_big_unit_qty,
+                    'available_small_unit_qty'=>$available_small_unit_qty,
+                    'big_unit_sales_price'=>$lastChallan->big_unit_sales_price??null,
+                    'small_unit_sales_price'=>$lastChallan->small_unit_sales_price,
+                ];
+                $inventory->update($inventoryInput);
+                $purchaseItem->delete();
+
+            }
+
+
 
             DB::commit();
             return response()->json("Successfully Updated",201);
 
-            }catch(Exception $e){
+            }catch(\Exception $e){
             DB::rollback();
             return response()->json(['error'=>$e->errorInfo[2]],500);
         }
